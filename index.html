@@ -5,46 +5,125 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Monitoring Portal Tol</title>
 <style>
-*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0}
-header{padding:16px;text-align:center;background:#1e293b;font-size:1.2rem;font-weight:700}
-.wrap{max-width:900px;margin:auto;padding:14px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
-.card{background:#1e293b;border-radius:12px;padding:16px;text-align:center}
-.card h3{margin:0 0 8px;font-size:.85rem;color:#94a3b8;font-weight:600}
-.val{font-size:2rem;font-weight:700}.unit{font-size:.9rem;color:#94a3b8}
-.lampu{display:flex;justify-content:center;gap:14px;margin-top:6px}
-.dot{width:34px;height:34px;border-radius:50%;background:#334155}
-.dot.r.on{background:#ef4444;box-shadow:0 0 16px #ef4444}
-.dot.y.on{background:#facc15;box-shadow:0 0 16px #facc15}
-.dot.g.on{background:#22c55e;box-shadow:0 0 16px #22c55e}
-#alert{display:none;margin:12px 0;padding:14px;border-radius:12px;background:#b91c1c;font-weight:700;text-align:center;animation:b 1s infinite}
-@keyframes b{50%{opacity:.6}}
-.ok{color:#22c55e}.bad{color:#ef4444}
-#log{max-height:220px;overflow:auto;text-align:left;font-size:.9rem}
-#log div{padding:6px 0;border-bottom:1px solid #334155}
-button{background:#334155;color:#e2e8f0;border:0;border-radius:8px;padding:8px 14px;cursor:pointer}
-#koneksi{margin:10px 0 0;text-align:center;font-size:.85rem;padding:8px;border-radius:8px;background:#334155}
-#koneksi.on{background:#14532d}#koneksi.off{background:#7f1d1d}
+:root{
+  color-scheme:dark;
+  --page:#101820;
+  --surface:#18232d;
+  --surface-raised:#1d2b36;
+  --line:#2c3b46;
+  --text:#edf3f5;
+  --muted:#91a1ab;
+  --accent:#42b8a5;
+  --green:#58c58a;
+  --red:#ef7770;
+  --amber:#e6b85c;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.45}
+header{border-bottom:1px solid var(--line);background:#141f28}
+.header-inner{max-width:1120px;margin:auto;padding:22px 24px 20px}
+.eyebrow,.card-label{margin:0;color:var(--muted);font-size:.7rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase}
+header h1{margin:5px 0 0;font-size:clamp(1.25rem,2.4vw,1.65rem);letter-spacing:-.025em;font-weight:650}
+.wrap{max-width:1120px;margin:0 auto;padding:20px 24px 36px}
+#koneksi{display:flex;align-items:center;gap:10px;min-height:44px;margin:0 0 16px;padding:10px 14px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--muted);font-size:.86rem;font-weight:600}
+#koneksi:before{content:"";width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:#73828c}
+#koneksi.on{border-color:#28664f;background:#152b27;color:#a8e3c2}
+#koneksi.on:before{background:var(--green)}
+#koneksi.off{border-color:#70413e;background:#302221;color:#f1aaa5}
+#koneksi.off:before{background:var(--red)}
+#alert{display:none;margin:0 0 16px;padding:15px 17px;border:1px solid #884b43;border-left:4px solid var(--red);border-radius:5px;background:#332522;color:#ffe0dc;font-weight:650;animation:alert-in .22s ease-out}
+@keyframes alert-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px}
+.card{min-width:0;padding:18px;border:1px solid var(--line);border-radius:6px;background:var(--surface)}
+.primary-card{grid-column:span 6;min-height:190px;padding:22px 24px;background:var(--surface-raised);border-top:2px solid var(--accent)}
+.support-card{grid-column:span 3;display:flex;flex-direction:column;justify-content:space-between;min-height:150px}
+.metric-card{grid-column:span 3;min-height:122px}
+.card-label{font-size:.68rem}
+.val{margin-top:12px;font-size:1.85rem;font-weight:650;line-height:1.1;letter-spacing:-.035em;font-variant-numeric:tabular-nums}
+.primary-card .val{margin-top:20px;font-size:clamp(3rem,7vw,4.35rem);letter-spacing:-.06em}
+.primary-card .unit{margin-top:5px;color:var(--muted);font-size:.92rem}
+.unit{color:var(--muted);font-size:.82rem}
+.status-value{display:inline-flex;align-self:flex-start;margin-top:16px;padding:5px 10px;border:1px solid #476453;border-radius:4px;background:#1a3028;color:#a8e3c2;font-size:1rem;font-weight:700;letter-spacing:.01em}
+#palang{display:block;margin-top:12px;padding-top:10px;border-top:1px solid var(--line);color:var(--muted);font-size:.84rem}
+.count-grid{margin-top:12px}
+.ok{color:var(--green)}
+.bad{color:var(--red)}
+.buzzer-card{grid-column:span 3;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;min-height:122px}
+#buzzer{margin:10px 0;color:var(--muted);font-size:1.05rem;font-weight:700;letter-spacing:.04em}
+button{border:1px solid #42665f;border-radius:4px;padding:9px 12px;background:#203d39;color:#c2eee1;font:inherit;font-size:.82rem;font-weight:650;cursor:pointer;transition:background .15s ease,border-color .15s ease}
+button:hover{border-color:var(--accent);background:#285149}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#alert button{margin-left:12px;border-color:#98584f;background:#492d29;color:#ffe0dc}
+.history-card{margin-top:12px;padding:0;overflow:hidden}
+.history-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:16px 18px;border-bottom:1px solid var(--line)}
+.history-heading h2{margin:0;font-size:.85rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+.history-heading span{color:var(--muted);font-size:.76rem}
+#log{max-height:250px;overflow:auto;padding:4px 18px;text-align:left;font-size:.86rem;font-variant-numeric:tabular-nums}
+#log div{padding:10px 0;border-bottom:1px solid var(--line);color:#c6d1d6}
+#log div:last-child{border-bottom:0}
+@media(max-width:760px){.primary-card{grid-column:span 12;min-height:165px}.support-card{grid-column:span 6}.metric-card,.buzzer-card{grid-column:span 6}}
+@media(max-width:480px){.header-inner{padding:18px 16px}.wrap{padding:14px 16px 28px}.grid{gap:9px}.card{padding:14px}.primary-card{padding:19px}.support-card{min-height:135px}.metric-card,.buzzer-card{min-height:112px}.val{font-size:1.55rem}.primary-card .val{font-size:3.3rem}.history-heading{align-items:flex-start;flex-direction:column;gap:3px}#alert{line-height:1.6}#alert button{margin:8px 0 0 6px}}
 </style>
 </head>
 <body>
-<header>🚧 Monitoring Kapasitas Kendaraan - Portal Tol</header>
+<header>
+  <div class="header-inner">
+    <p class="eyebrow">Pusat pemantauan operasional</p>
+    <h1>Monitoring Kapasitas Kendaraan — Portal Tol</h1>
+  </div>
+</header>
 <div class="wrap">
-<div id="koneksi">Menghubungkan ke server...</div>
-<div id="alert"></div>
-<div class="grid" style="margin-top:12px">
- <div class="card"><h3>BERAT KENDARAAN</h3><div class="val" id="berat">0.00</div><div class="unit">kg</div></div>
- <div class="card"><h3>JARAK (ULTRASONIK)</h3><div class="val" id="jarak">-</div><div class="unit">cm</div></div>
- <div class="card"><h3>STATUS</h3><div class="val" id="status" style="font-size:1.3rem">-</div><div class="unit" id="palang">Palang: -</div></div>
- <div class="card"><h3>INDIKATOR LED</h3><div class="lampu"><div class="dot r" id="lr"></div><div class="dot y" id="ly"></div><div class="dot g" id="lg"></div></div></div>
-</div>
-<div class="grid" style="margin-top:12px">
- <div class="card"><h3>KENDARAAN LOLOS</h3><div class="val ok" id="lolos">0</div></div>
- <div class="card"><h3>KENDARAAN TIDAK LOLOS</h3><div class="val bad" id="tolak">0</div></div>
- <div class="card"><h3>TOTAL</h3><div class="val" id="total">0</div></div>
- <div class="card"><h3>BUZZER</h3><div class="val" id="buzzer" style="font-size:1.3rem">MATI</div><button onclick="aktifSuara()">🔔 Aktifkan suara alarm</button></div>
-</div>
-<div class="card" style="margin-top:12px"><h3>RIWAYAT KEJADIAN (sejak halaman dibuka)</h3><div id="log"></div></div>
+  <div id="koneksi">Menghubungkan ke server...</div>
+  <div id="alert"></div>
+  <div class="grid">
+    <div class="card primary-card">
+      <h2 class="card-label">Berat kendaraan</h2>
+      <div class="val" id="berat">0.00</div>
+      <div class="unit">kg</div>
+    </div>
+    <div class="card support-card">
+      <div>
+        <h2 class="card-label">Jarak ultrasonik</h2>
+        <div class="val" id="jarak">-</div>
+      </div>
+      <div class="unit">cm</div>
+    </div>
+    <div class="card support-card">
+      <div>
+        <h2 class="card-label">Status kendaraan</h2>
+        <div class="status-value" id="status">-</div>
+      </div>
+      <div class="unit" id="palang">Palang: -</div>
+    </div>
+  </div>
+  <div class="grid count-grid">
+    <div class="card metric-card">
+      <h2 class="card-label">Kendaraan lolos</h2>
+      <div class="val ok" id="lolos">0</div>
+    </div>
+    <div class="card metric-card">
+      <h2 class="card-label">Kendaraan tidak lolos</h2>
+      <div class="val bad" id="tolak">0</div>
+    </div>
+    <div class="card metric-card">
+      <h2 class="card-label">Total kendaraan</h2>
+      <div class="val" id="total">0</div>
+    </div>
+    <div class="card buzzer-card">
+      <div>
+        <h2 class="card-label">Buzzer</h2>
+        <div class="val" id="buzzer">MATI</div>
+      </div>
+      <button onclick="aktifSuara()">Aktifkan suara alarm</button>
+    </div>
+  </div>
+  <section class="card history-card">
+    <div class="history-heading">
+      <h2>Riwayat kejadian</h2>
+      <span>Sejak halaman dibuka</span>
+    </div>
+    <div id="log"></div>
+  </section>
 </div>
 
 <script type="module">
@@ -109,9 +188,6 @@ onValue(ref(db, "portal"), snap => {
   $("jarak").textContent = d.jarak < 0 ? "-" : Number(d.jarak).toFixed(1);
   $("status").textContent = d.status;
   $("palang").textContent = "Palang: " + d.palang;
-  $("lr").className = "dot r" + (d.led_r ? " on" : "");
-  $("ly").className = "dot y" + (d.led_y ? " on" : "");
-  $("lg").className = "dot g" + (d.led_g ? " on" : "");
   $("lolos").textContent = d.lolos;
   $("tolak").textContent = d.ditolak;
   $("total").textContent = d.lolos + d.ditolak;
@@ -126,7 +202,7 @@ onValue(ref(db, "portal"), snap => {
     bip();
     const a = $("alert");
     a.style.display = "block";
-    a.innerHTML = "⚠️ KENDARAAN TIDAK LOLOS! Berat " + Number(d.beratDitolak).toFixed(2) +
+    a.innerHTML = "KENDARAAN TIDAK LOLOS! Berat " + Number(d.beratDitolak).toFixed(2) +
       " kg melebihi batas " + Number(d.batas).toFixed(2) + " kg " +
       '<button onclick="this.parentNode.style.display=\'none\';document.title=\'Monitoring Portal Tol\'">Tutup</button>';
     logAdd("NOTIFIKASI: kendaraan ditolak (" + Number(d.beratDitolak).toFixed(2) + " kg)");
