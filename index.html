@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Monitoring Portal Tol</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0}
+header{padding:16px;text-align:center;background:#1e293b;font-size:1.2rem;font-weight:700}
+.wrap{max-width:900px;margin:auto;padding:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.card{background:#1e293b;border-radius:12px;padding:16px;text-align:center}
+.card h3{margin:0 0 8px;font-size:.85rem;color:#94a3b8;font-weight:600}
+.val{font-size:2rem;font-weight:700}.unit{font-size:.9rem;color:#94a3b8}
+.lampu{display:flex;justify-content:center;gap:14px;margin-top:6px}
+.dot{width:34px;height:34px;border-radius:50%;background:#334155}
+.dot.r.on{background:#ef4444;box-shadow:0 0 16px #ef4444}
+.dot.y.on{background:#facc15;box-shadow:0 0 16px #facc15}
+.dot.g.on{background:#22c55e;box-shadow:0 0 16px #22c55e}
+#alert{display:none;margin:12px 0;padding:14px;border-radius:12px;background:#b91c1c;font-weight:700;text-align:center;animation:b 1s infinite}
+@keyframes b{50%{opacity:.6}}
+.ok{color:#22c55e}.bad{color:#ef4444}
+#log{max-height:220px;overflow:auto;text-align:left;font-size:.9rem}
+#log div{padding:6px 0;border-bottom:1px solid #334155}
+button{background:#334155;color:#e2e8f0;border:0;border-radius:8px;padding:8px 14px;cursor:pointer}
+#koneksi{margin:10px 0 0;text-align:center;font-size:.85rem;padding:8px;border-radius:8px;background:#334155}
+#koneksi.on{background:#14532d}#koneksi.off{background:#7f1d1d}
+</style>
+</head>
+<body>
+<header>🚧 Monitoring Kapasitas Kendaraan - Portal Tol</header>
+<div class="wrap">
+<div id="koneksi">Menghubungkan ke server...</div>
+<div id="alert"></div>
+<div class="grid" style="margin-top:12px">
+ <div class="card"><h3>BERAT KENDARAAN</h3><div class="val" id="berat">0.00</div><div class="unit">kg</div></div>
+ <div class="card"><h3>JARAK (ULTRASONIK)</h3><div class="val" id="jarak">-</div><div class="unit">cm</div></div>
+ <div class="card"><h3>STATUS</h3><div class="val" id="status" style="font-size:1.3rem">-</div><div class="unit" id="palang">Palang: -</div></div>
+ <div class="card"><h3>INDIKATOR LED</h3><div class="lampu"><div class="dot r" id="lr"></div><div class="dot y" id="ly"></div><div class="dot g" id="lg"></div></div></div>
+</div>
+<div class="grid" style="margin-top:12px">
+ <div class="card"><h3>KENDARAAN LOLOS</h3><div class="val ok" id="lolos">0</div></div>
+ <div class="card"><h3>KENDARAAN TIDAK LOLOS</h3><div class="val bad" id="tolak">0</div></div>
+ <div class="card"><h3>TOTAL</h3><div class="val" id="total">0</div></div>
+ <div class="card"><h3>BUZZER</h3><div class="val" id="buzzer" style="font-size:1.3rem">MATI</div><button onclick="aktifSuara()">🔔 Aktifkan suara alarm</button></div>
+</div>
+<div class="card" style="margin-top:12px"><h3>RIWAYAT KEJADIAN (sejak halaman dibuka)</h3><div id="log"></div></div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+// ====== GANTI dengan Database URL Firebase Anda ======
+const DATABASE_URL = "https://NAMA-PROYEK-default-rtdb.firebaseio.com";
+// =====================================================
+
+const app = initializeApp({ databaseURL: DATABASE_URL });
+const db = getDatabase(app);
+const $ = id => document.getElementById(id);
+
+let lastAlert = null, audioCtx = null, prevStatus = "";
+let lastTs = null, lastChange = 0, serverOnline = false, adaData = false;
+
+window.aktifSuara = function () {
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  bip();
+  alert("Suara alarm aktif");
+};
+
+function bip() {
+  if (!audioCtx) return;
+  [0, 0.35, 0.7].forEach(t => {
+    const o = audioCtx.createOscillator();
+    o.frequency.value = 880;
+    o.connect(audioCtx.destination);
+    o.start(audioCtx.currentTime + t);
+    o.stop(audioCtx.currentTime + t + 0.2);
+  });
+}
+
+function logAdd(t) {
+  const d = document.createElement("div");
+  d.textContent = new Date().toLocaleTimeString() + " - " + t;
+  $("log").prepend(d);
+}
+
+// Status koneksi: server Firebase & ESP32
+function updateKoneksi() {
+  const k = $("koneksi");
+  if (!serverOnline) { k.className = "off"; k.textContent = "Terputus dari server"; return; }
+  if (!adaData) { k.className = "off"; k.textContent = "Belum ada data dari ESP32"; return; }
+  const umur = Date.now() - lastChange;
+  if (umur > 15000) { k.className = "off"; k.textContent = "ESP32 OFFLINE (tidak mengirim data)"; }
+  else { k.className = "on"; k.textContent = "ESP32 online - data real-time"; }
+}
+setInterval(updateKoneksi, 1000);
+
+onValue(ref(db, ".info/connected"), snap => { serverOnline = snap.val() === true; updateKoneksi(); });
+
+onValue(ref(db, "portal"), snap => {
+  const d = snap.val();
+  if (!d) { adaData = false; updateKoneksi(); return; }
+  adaData = true;
+
+  if (d.ts !== lastTs) { lastTs = d.ts; lastChange = Date.now(); }
+
+  $("berat").textContent = Number(d.berat).toFixed(2);
+  $("jarak").textContent = d.jarak < 0 ? "-" : Number(d.jarak).toFixed(1);
+  $("status").textContent = d.status;
+  $("palang").textContent = "Palang: " + d.palang;
+  $("lr").className = "dot r" + (d.led_r ? " on" : "");
+  $("ly").className = "dot y" + (d.led_y ? " on" : "");
+  $("lg").className = "dot g" + (d.led_g ? " on" : "");
+  $("lolos").textContent = d.lolos;
+  $("tolak").textContent = d.ditolak;
+  $("total").textContent = d.lolos + d.ditolak;
+  $("buzzer").textContent = d.buzzer ? "BERBUNYI" : "MATI";
+
+  if (d.status !== prevStatus) { logAdd(d.status); prevStatus = d.status; }
+
+  // Notifikasi kendaraan tidak lolos (langsung di halaman)
+  if (lastAlert === null) lastAlert = d.alertId;     // jangan bunyi untuk kejadian lama saat halaman baru dibuka
+  if (d.alertId !== lastAlert) {
+    lastAlert = d.alertId;
+    bip();
+    const a = $("alert");
+    a.style.display = "block";
+    a.innerHTML = "⚠️ KENDARAAN TIDAK LOLOS! Berat " + Number(d.beratDitolak).toFixed(2) +
+      " kg melebihi batas " + Number(d.batas).toFixed(2) + " kg " +
+      '<button onclick="this.parentNode.style.display=\'none\';document.title=\'Monitoring Portal Tol\'">Tutup</button>';
+    logAdd("NOTIFIKASI: kendaraan ditolak (" + Number(d.beratDitolak).toFixed(2) + " kg)");
+    if ("Notification" in window && Notification.permission === "granted")
+      new Notification("Kendaraan tidak lolos", { body: "Berat " + Number(d.beratDitolak).toFixed(2) + " kg melebihi batas" });
+    document.title = "(!) KENDARAAN DITOLAK";
+  }
+});
+
+if ("Notification" in window && Notification.permission === "default") Notification.requestPermission();
+</script>
+</body>
+</html>
