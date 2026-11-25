@@ -130,26 +130,28 @@ button.kecil{padding:6px 12px;font-size:.85rem;background:#222f3f;color:var(--mu
   </div>
 </div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script>
+// ====== ISI DARI EMQX CLOUD (lihat tutorial) ======
+const MQTT_URL  = "wss://d7e7c9be.ala.asia-southeast1.emqxsl.com:8084/mqtt";   // alamat Overview + port 8084 + /mqtt
+const MQTT_USER = "dashboard";                                      // user khusus dashboard
+const MQTT_PASS = "ISI_PASSWORD_MQTT_DASHBOARD";
+// ==================================================
 
-// ====== Database URL Firebase Anda ======
-const DATABASE_URL = "https://portal-tol-default-rtdb.asia-southeast1.firebasedatabase.app";
-// ========================================
+const TOPIC_DATA   = "portal/tol/data";
+const TOPIC_STATUS = "portal/tol/status";
+const TOPIC_CMD    = "portal/tol/cmd";
 
-const app = initializeApp({ databaseURL: DATABASE_URL });
-const db = getDatabase(app);
 const $ = id => document.getElementById(id);
 
 let lastAlert = null, audioCtx = null, prevStatus = "";
-let lastTs = null, lastChange = 0, serverOnline = false, adaData = false, lastReset = null;
+let lastChange = 0, serverOnline = false, adaData = false, espOnline = false, lastReset = null;
 
-window.aktifSuara = function () {
+function aktifSuara() {
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   bip();
   alert("Suara alarm aktif");
-};
+}
 
 function bip() {
   if (!audioCtx) return;
@@ -162,25 +164,10 @@ function bip() {
   });
 }
 
-// Hapus riwayat di halaman ini saja (tanpa PIN)
-window.hapusRiwayat = function () {
+// Hapus riwayat di halaman ini saja
+function hapusRiwayat() {
   $("log").innerHTML = "";
-};
-
-// Reset jumlah lolos, tidak lolos, dan riwayat
-window.resetData = async function () {
-  if (!adaData || Date.now() - lastChange > 15000) {
-    alert("ESP32 sedang offline, reset tidak bisa dilakukan.");
-    return;
-  }
-  if (!confirm("Reset jumlah kendaraan lolos, tidak lolos, dan riwayat?\nTindakan ini tidak bisa dibatalkan.")) return;
-  try {
-    await set(ref(db, "perintah"), { id: String(Date.now()) });
-    logAdd("Perintah reset dikirim, menunggu ESP32...");
-  } catch (e) {
-    alert("Reset gagal dikirim. Cek aturan (Rules) Firebase dan koneksi internet.");
-  }
-};
+}
 
 function logAdd(teks, kelas) {
   const d = document.createElement("div");
@@ -189,24 +176,34 @@ function logAdd(teks, kelas) {
   $("log").prepend(d);
 }
 
-// Status koneksi: server Firebase dan ESP32
+// Reset jumlah lolos, tidak lolos, dan riwayat
+function resetData() {
+  if (!serverOnline) { alert("Belum tersambung ke server MQTT."); return; }
+  if (!espOnline || Date.now() - lastChange > 15000) {
+    alert("ESP32 sedang offline, reset tidak bisa dilakukan.");
+    return;
+  }
+  if (!confirm("Reset jumlah kendaraan lolos, tidak lolos, dan riwayat?\nTindakan ini tidak bisa dibatalkan.")) return;
+  client.publish(TOPIC_CMD, "reset", { qos: 1 }, err => {
+    if (err) alert("Reset gagal dikirim: " + err.message);
+    else logAdd("Perintah reset dikirim, menunggu ESP32...");
+  });
+}
+
+// Status koneksi: server EMQX dan ESP32
 function updateKoneksi() {
   const k = $("koneksi"), t = $("koneksiTeks");
   if (!serverOnline) { k.className = "off"; t.textContent = "Terputus dari server"; return; }
   if (!adaData)      { k.className = "off"; t.textContent = "Belum ada data dari ESP32"; return; }
+  if (!espOnline)    { k.className = "off"; t.textContent = "ESP32 OFFLINE (tidak terhubung ke server)"; return; }
+  if (lastChange === 0) { k.className = "off"; t.textContent = "Menunggu data langsung dari ESP32..."; return; }
   if (Date.now() - lastChange > 15000) { k.className = "off"; t.textContent = "ESP32 OFFLINE (tidak mengirim data)"; }
   else { k.className = "on"; t.textContent = "ESP32 online - data real-time"; }
 }
 setInterval(updateKoneksi, 1000);
 
-onValue(ref(db, ".info/connected"), snap => { serverOnline = snap.val() === true; updateKoneksi(); });
-
-onValue(ref(db, "portal"), snap => {
-  const d = snap.val();
-  if (!d) { adaData = false; updateKoneksi(); return; }
-  adaData = true;
-  if (d.ts !== lastTs) { lastTs = d.ts; lastChange = Date.now(); }
-
+// ---------- Tampilkan data ----------
+function tampilkan(d) {
   const berat = Number(d.berat), batas = Number(d.batas);
   $("berat").textContent = berat.toFixed(1);
   $("batas").textContent = isNaN(batas) ? "-" : batas.toFixed(0);
@@ -256,6 +253,46 @@ onValue(ref(db, "portal"), snap => {
     if ("Notification" in window && Notification.permission === "granted")
       new Notification("Kendaraan tidak lolos", { body: "Berat " + bt + " g melebihi batas" });
     document.title = "(!) KENDARAAN DITOLAK";
+  }
+}
+
+// ---------- Koneksi MQTT (EMQX Cloud, WebSocket TLS) ----------
+const client = mqtt.connect(MQTT_URL, {
+  clientId: "web-" + Math.random().toString(16).slice(2, 10),
+  username: MQTT_USER,
+  password: MQTT_PASS,
+  clean: true,
+  reconnectPeriod: 2000,
+  connectTimeout: 8000
+});
+
+client.on("connect", () => {
+  serverOnline = true;
+  client.subscribe([TOPIC_DATA, TOPIC_STATUS], { qos: 0 });
+  updateKoneksi();
+});
+client.on("reconnect", () => { serverOnline = false; updateKoneksi(); });
+client.on("close",     () => { serverOnline = false; updateKoneksi(); });
+client.on("offline",   () => { serverOnline = false; updateKoneksi(); });
+client.on("error", e => { console.error("MQTT error:", e && e.message); });
+
+client.on("message", (topic, payload, packet) => {
+  const teks = payload.toString();
+
+  if (topic === TOPIC_STATUS) {
+    espOnline = (teks === "online");
+    if (!espOnline) lastChange = 0;
+    updateKoneksi();
+    return;
+  }
+
+  if (topic === TOPIC_DATA) {
+    let d;
+    try { d = JSON.parse(teks); } catch (e) { return; }
+    adaData = true;
+    if (!packet.retain) lastChange = Date.now();   // pesan retained = data lama, bukan bukti ESP32 online
+    tampilkan(d);
+    updateKoneksi();
   }
 });
 
