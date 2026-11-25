@@ -58,6 +58,8 @@ header h1{margin:0;max-width:1200px;margin:auto;font-size:clamp(1.3rem,3.2vw,2re
 
 button{font:inherit;font-weight:700;background:#16352b;color:#86efac;border:1px solid #1c5a3c;border-radius:8px;padding:10px 14px;cursor:pointer}
 button:hover{filter:brightness(1.15)}
+button.bahaya{background:#3a1a1a;color:#fca5a5;border-color:#6b2a2a}
+button.kecil{padding:6px 12px;font-size:.85rem;background:#222f3f;color:var(--muted);border-color:var(--line)}
 
 /* Riwayat */
 .riwayat{padding:0;min-height:0}
@@ -110,7 +112,11 @@ button:hover{filter:brightness(1.15)}
   <div class="row row2">
     <div class="card"><h3>KENDARAAN LOLOS</h3><div class="angka hijau" id="lolos" style="font-size:2.6rem">0</div></div>
     <div class="card"><h3>KENDARAAN TIDAK LOLOS</h3><div class="angka merah" id="tolak" style="font-size:2.6rem">0</div></div>
-    <div class="card"><h3>TOTAL KENDARAAN</h3><div class="angka" id="total" style="font-size:2.6rem">0</div></div>
+    <div class="card">
+      <h3>TOTAL KENDARAAN</h3>
+      <div class="angka" id="total" style="font-size:2.6rem">0</div>
+      <div style="margin-top:auto;padding-top:14px"><button class="bahaya" onclick="resetData()">🔄 Reset data</button></div>
+    </div>
     <div class="card">
       <h3>BUZZER</h3>
       <div class="sedang" id="buzzer">MATI</div>
@@ -119,14 +125,14 @@ button:hover{filter:brightness(1.15)}
   </div>
 
   <div class="card riwayat">
-    <div class="rhead"><h3>RIWAYAT KEJADIAN</h3><span>Sejak halaman dibuka</span></div>
+    <div class="rhead"><h3>RIWAYAT KEJADIAN</h3><span>Sejak halaman dibuka &nbsp; <button class="kecil" onclick="hapusRiwayat()">Hapus riwayat</button></span></div>
     <div id="log"></div>
   </div>
 </div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 // ====== Database URL Firebase Anda ======
 const DATABASE_URL = "https://portal-tol-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -137,7 +143,7 @@ const db = getDatabase(app);
 const $ = id => document.getElementById(id);
 
 let lastAlert = null, audioCtx = null, prevStatus = "";
-let lastTs = null, lastChange = 0, serverOnline = false, adaData = false;
+let lastTs = null, lastChange = 0, serverOnline = false, adaData = false, lastReset = null;
 
 window.aktifSuara = function () {
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -155,6 +161,28 @@ function bip() {
     o.stop(audioCtx.currentTime + t + 0.2);
   });
 }
+
+// Hapus riwayat di halaman ini saja (tanpa PIN)
+window.hapusRiwayat = function () {
+  $("log").innerHTML = "";
+};
+
+// Reset jumlah lolos, tidak lolos, dan riwayat (butuh PIN)
+window.resetData = async function () {
+  if (!adaData || Date.now() - lastChange > 15000) {
+    alert("ESP32 sedang offline, reset tidak bisa dilakukan.");
+    return;
+  }
+  const pin = prompt("Masukkan PIN untuk mereset data:");
+  if (pin === null || pin === "") return;
+  if (!confirm("Reset jumlah kendaraan lolos, tidak lolos, dan riwayat?\nTindakan ini tidak bisa dibatalkan.")) return;
+  try {
+    await set(ref(db, "perintah"), { id: String(Date.now()), pin: pin });
+    logAdd("Perintah reset dikirim, menunggu ESP32...");
+  } catch (e) {
+    alert("Reset ditolak. PIN salah.");
+  }
+};
 
 function logAdd(teks, kelas) {
   const d = document.createElement("div");
@@ -202,6 +230,17 @@ onValue(ref(db, "portal"), snap => {
   $("total").textContent = d.lolos + d.ditolak;
   $("buzzer").textContent = d.buzzer ? "BERBUNYI" : "MATI";
   $("buzzer").className = "sedang " + (d.buzzer ? "merah" : "");
+
+  // Reset data dari dashboard (berlaku untuk semua yang sedang membuka halaman)
+  if (lastReset === null) lastReset = d.resetId;
+  if (d.resetId !== lastReset) {
+    lastReset = d.resetId;
+    $("log").innerHTML = "";
+    prevStatus = "";
+    $("alert").style.display = "none";
+    document.title = "Monitoring Portal Tol";
+    logAdd("Data direset: jumlah lolos dan tidak lolos kembali ke 0");
+  }
 
   if (d.status !== prevStatus) { logAdd(d.status); prevStatus = d.status; }
 
