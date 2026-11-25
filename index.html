@@ -167,20 +167,18 @@ window.hapusRiwayat = function () {
   $("log").innerHTML = "";
 };
 
-// Reset jumlah lolos, tidak lolos, dan riwayat (butuh PIN)
+// Reset jumlah lolos, tidak lolos, dan riwayat
 window.resetData = async function () {
   if (!adaData || Date.now() - lastChange > 15000) {
     alert("ESP32 sedang offline, reset tidak bisa dilakukan.");
     return;
   }
-  const pin = prompt("Masukkan PIN untuk mereset data:");
-  if (pin === null || pin === "") return;
   if (!confirm("Reset jumlah kendaraan lolos, tidak lolos, dan riwayat?\nTindakan ini tidak bisa dibatalkan.")) return;
   try {
-    await set(ref(db, "perintah"), { id: String(Date.now()), pin: pin });
+    await set(ref(db, "perintah"), { id: String(Date.now()) });
     logAdd("Perintah reset dikirim, menunggu ESP32...");
   } catch (e) {
-    alert("Reset ditolak. PIN salah.");
+    alert("Reset gagal dikirim. Cek aturan (Rules) Firebase dan koneksi internet.");
   }
 };
 
